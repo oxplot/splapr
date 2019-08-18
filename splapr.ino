@@ -5,14 +5,14 @@
 #define TX_PIN 4
 #define SERIAL_BAUD 9600
 
-#define MOT_1_PIN 1 // TODO color
-#define MOT_2_PIN 3 // TODO color
-#define MOT_3_PIN 2 // TODO color
+#define MOT_1_PIN 0 // TODO color
+#define MOT_2_PIN 2 // TODO color
+#define MOT_3_PIN 1 // TODO color
 #define MOT_4_PIN 4 // TODO color
 #define MOT_STEPS 2038L // the number of steps in one revolution of the 28BYJ-48 motor
-#define MODULE_STEPS ((MOT_STEPS * 39L) / 32L) // 39:32 gear ratio
+#define MODULE_STEPS ((MOT_STEPS * 39L) / 32L) // 39:32 module gear ratio
 
-#define POS_SENSE_PIN 0
+#define POS_SENSE_PIN 3
 
 #define STATUS_MOVING 1
 #define STATUS_IDLE 0
@@ -31,6 +31,12 @@ void setup() {
   pinMode(MOT_3_PIN, OUTPUT);
   pinMode(MOT_4_PIN, OUTPUT);
   serial.begin(SERIAL_BAUD);
+
+  // Turn all output off by default
+  digitalWrite(MOT_1_PIN, LOW);
+  digitalWrite(MOT_2_PIN, LOW);
+  digitalWrite(MOT_3_PIN, LOW);
+  digitalWrite(MOT_4_PIN, LOW);
 }
 
 void loop() {
@@ -87,7 +93,7 @@ void handleIncoming() {
   buf[0] = buf[1] = buf[2] = buf[3] = 0;
 }
 
-// Returns true if we've arrived at loc, otherwise false.
+// Returns true if we've arrived at loc, otherwise false and step forward.
 bool stepOnceTowards(long loc) {
   static long realLoc = -1L;
   static long normalizedLoc = 0L;
