@@ -49,48 +49,57 @@ void loop() {
 void handleIncoming() {
   // Packet buffer includes 3 bytes of data as descibed below and one byte of checksum.
   // Packet structure:
-  // Byte 0, bits 0-7: MSBits of Src/Dst
-  // Byte 1, bits 6-7: LSBits of Src/Dst
-  // Byte 1, bits 0-5: MSBits of Position (ignored for response packet)
-  // Byte 2, bits 2-7: LSBits of Position (ignored for response packet)
-  // Byte 2, bit 1:    Packet Type (0: response, 1: command)
-  // Byte 2, bit 0:    Status (0: idle, 1: moving)
-  // Byte 3:           SMBUS CRC-8 checksum
-  static byte buf[4] = {0, 0, 0, 0};
+  // Byte 0:           Constant 0xd4 as packet start. Also helps with avoiding valid packets of all zeros.
+  // Byte 1, bits 0-7: MSBits of Src/Dst
+  // Byte 2, bits 6-7: LSBits of Src/Dst
+  // Byte 2, bits 0-5: MSBits of Position (ignored for response packet)
+  // Byte 3, bits 2-7: LSBits of Position (ignored for response packet)
+  // Byte 3, bit 1:    Packet Type (0: response, 1: command)
+  // Byte 3, bit 0:    Status (0: idle, 1: moving)
+  // Byte 4:           SMBUS CRC-8 checksum
+  static byte buf[5] = {0xd4, 0, 0, 0, 0};
   
   if (!serial.available()) {
     return;
   }
 
-  buf[0] = buf[1];
   buf[1] = buf[2];
   buf[2] = buf[3];
-  buf[3] = serial.read();
+  buf[3] = buf[4];
+  buf[4] = (byte)serial.read();
 
-  if (CRC8.smbus(buf, 3) != buf[3]) {
+  if (CRC8.smbus(buf, 4) != buf[4]) {
     return;
   }
 
   // Extract packet data
-  unsigned long srcDst = ((unsigned long)buf[0] << 2) | ((unsigned long)buf[1] >> 6);
-  bool cmdPacket = ((unsigned long)buf[2] >> 1) & 1L;
+  unsigned long srcDst = ((unsigned long)buf[1] << 2) | ((unsigned long)buf[2] >> 6);
+  bool cmdPacket = ((unsigned long)buf[3] >> 1) & 1L;
+  unsigned long pos = ((((1L << 6) - 1L) & (unsigned long)buf[2]) << 6) | ((unsigned long)buf[3] >> 2);
+
+  serial.print("src/dst = ");
+  serial.println(srcDst);
+  serial.print("target pos = ");
+  serial.println(targetPosition);
 
   if (srcDst == 0) { // This packet was destined for us
     if (!cmdPacket) { // Invalid packet - must be a command
       return;
     }
-    buf[2] = (unsigned long)buf[2] & ~0b10L; // Change packet type to response
-    buf[2] = ((unsigned long)buf[2] & ~1L) | (curStatus == STATUS_IDLE ? 0L : 1L); // Set current status
-    targetPosition = ((((1L << 6) - 1L) & (unsigned long)buf[1]) << 6) | ((unsigned long)buf[2] >> 2); // Update target position
+    buf[3] = (unsigned long)buf[3] & ~0b10L; // Change packet type to response
+    cmdPacket = false;
+    buf[3] = ((unsigned long)buf[3] & ~1L) | (curStatus == STATUS_IDLE ? 0L : 1L); // Set current status
+    targetPosition = pos;
   }
 
   // Update src/dst & CRC
   srcDst = srcDst + (cmdPacket ? -1L : 1L);
-  buf[3] = CRC8.smbus(buf, 3);
+  buf[1] = srcDst >> 2;
+  buf[2] = (0b111111 & buf[2]) | ((srcDst & 0b11) << 6);
+  buf[4] = CRC8.smbus(buf, 4);
 
   // Send out packet & clear buffer for future receptions.
-  serial.write(buf, 4);
-  buf[0] = buf[1] = buf[2] = buf[3] = 0;
+  serial.write(buf + 1, 4);
 }
 
 // Returns true if we've arrived at loc, otherwise false and step forward.
@@ -133,8 +142,6 @@ bool stepOnceTowards(long loc) {
       realLoc++;
     }
   } while (digitalRead(TX_PIN) == HIGH);
-
-  serial.println(realLoc);
 
   // Turn motor power off to avoid consuming power and heating up the motor.
   digitalWrite(MOT_1_PIN, LOW);
