@@ -14,9 +14,7 @@
   #define MOT_1_PIN 2 // Blue wire
   #define MOT_2_PIN 4 // Pink wire
   #define MOT_3_PIN 3 // Yellow wire
-  #define MOT_4_PIN TX_PIN // Orange wire
   #define POS_SENSE_PIN 7
-  
   #define serial Serial
 #else
   #define RX_PIN 5
@@ -24,9 +22,10 @@
   #define MOT_1_PIN 0 // Blue wire
   #define MOT_2_PIN 2 // Pink wire
   #define MOT_3_PIN 1 // Yellow wire
-  #define MOT_4_PIN TX_PIN // Orange wire
   #define POS_SENSE_PIN 3
 #endif
+
+#define MOT_4_PIN TX_PIN // Orange wire
 
 #define SERIAL_BAUD 9600
 #define MOT_STEPS 2038L // the number of steps in one revolution of the 28BYJ-48 motor
@@ -65,10 +64,10 @@ void loop() {
   if (targetPosition != POS_UNINIT) {
     curStatus = stepOnceTowards(targetPosition) ? STATUS_IDLE : STATUS_MOVING;
   }
-  handleIncoming();
+  handleComms();
 }
 
-void handleIncoming() {
+void handleComms() {
   // Packet buffer includes 3 bytes of data as descibed below and one byte of checksum.
   // Packet structure:
   // Byte 0:           Constant 0xd4 as packet header. Also helps with avoiding valid packets of all zeros.
@@ -79,7 +78,7 @@ void handleIncoming() {
   // Byte 3, bit 1:    Packet Type (0: response, 1: command)
   // Byte 3, bit 0:    Status (0: idle, 1: moving)
   // Byte 4:           SMBUS CRC-8 checksum
-  static byte buf[5] = {0, 0, 0, 0, 0};
+  static byte buf[5];
   
   if (!serial.available()) {
     return;
@@ -103,7 +102,7 @@ void handleIncoming() {
   if (srcDst == 0) { // This packet was destined for us
     if (!cmdPacket) { // Invalid packet - must be a command
       return;
-    }:
+    }
     buf[3] = (unsigned long)buf[3] & ~0b10L; // Change packet type to response
     cmdPacket = false;
     buf[3] = ((unsigned long)buf[3] & ~1L) | (curStatus == STATUS_IDLE ? 0L : 1L); // Set current status
@@ -116,7 +115,7 @@ void handleIncoming() {
   buf[2] = (0b111111 & buf[2]) | ((srcDst & 0b11) << 6);
   buf[4] = CRC8.smbus(buf, 4);
 
-  // Send out packet & clear buffer for future receptions.
+  // Send out packet
   serial.write(buf, 5);
 }
 
