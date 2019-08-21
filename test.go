@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"time"
 
@@ -8,8 +9,17 @@ import (
 	"github.com/tarm/serial"
 )
 
-var crcSMBUSParams = crc8.Params{0x07, 0x00, false, false, 0x00, 0xf4, "CRC-8/SMBUS"}
-var maximCRCTable = crc8.MakeTable(crcSMBUSParams)
+var (
+	crcSMBUSParams = crc8.Params{0x07, 0x00, false, false, 0x00, 0xf4, "CRC-8/SMBUS"}
+	smbusCRCTable  = crc8.MakeTable(crcSMBUSParams)
+
+	baud         = flag.Int("b", 9600, "baud rate")
+	device       = flag.String("d", "/dev/ttyUSB0", "serial device")
+	sendCmd      = flag.Bool("c", true, "send command instead of response")
+	targetPos    = flag.Int("p", 0, "target position")
+	targetModule = flag.Int("m", 0, "target module")
+	readReply    = flag.Bool("r", false, "read reply packet")
+)
 
 type packetType int
 type moduleStatus int
@@ -27,6 +37,7 @@ type packet struct {
 	pos    int
 	typ    packetType
 	status moduleStatus
+	valid  bool
 }
 
 func unmarshalPacket(raw []byte) packet {
@@ -35,6 +46,7 @@ func unmarshalPacket(raw []byte) packet {
 	p.pos = ((int(raw[2]) & 0x3f) << 6) | (int(raw[3]) >> 2)
 	p.typ = packetType((raw[3] & 2) >> 1)
 	p.status = moduleStatus(raw[3] & 1)
+	p.valid = crc8.Checksum(raw[:4], smbusCRCTable) == raw[4] && raw[0] == 0xd4
 	return p
 }
 
@@ -45,30 +57,41 @@ func (p packet) marshal() []byte {
 	ret[2] = byte(((p.srcDst & 0x3) << 6) | (p.pos >> 6))
 	ret[3] = byte((p.pos & 0x3f) << 2)
 	ret[3] |= byte((byte(p.typ) << 1) | byte(p.status))
-	ret[4] = crc8.Checksum(ret[:4], maximCRCTable)
+	ret[4] = crc8.Checksum(ret[:4], smbusCRCTable)
 	return ret
 }
 
 func main() {
+	flag.Parse()
 	s, err := serial.OpenPort(&serial.Config{
-		Name: "/dev/ttyUSB0",
-		Baud: 9600,
+		Name: *device,
+		Baud: *baud,
 	})
 	if err != nil {
 		panic(err)
 	}
+	defer s.Close()
 
 	p := packet{
-		srcDst: 0,
-		pos:    77,
-		typ:    packetTypeCommand,
+		srcDst: *targetModule,
+		pos:    *targetPos,
+		valid:  true,
 	}
+	if *sendCmd {
+		p.typ = packetTypeCommand
+	} else {
+		p.typ = packetTypeResponse
+	}
+
 	buf := p.marshal()
-	fmt.Printf("%+v\n", p)
-	p = unmarshalPacket(buf)
+	fmt.Printf("Sending %+v\n", p)
 
 	if _, err := s.Write(buf); err != nil {
 		panic(err)
+	}
+
+	if !*readReply {
+		return
 	}
 
 	time.Sleep(time.Second)
@@ -78,7 +101,5 @@ func main() {
 	}
 
 	p = unmarshalPacket(buf)
-	fmt.Printf("%+v\n", p)
-
-	s.Close()
+	fmt.Printf("Received %+v\n", p)
 }
