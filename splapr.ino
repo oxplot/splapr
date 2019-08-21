@@ -99,6 +99,8 @@ void handleComms() {
   bool cmdPacket = ((unsigned long)buf[3] >> 1) & 1L;
   unsigned long pos = ((((1L << 6) - 1L) & (unsigned long)buf[2]) << 6) | ((unsigned long)buf[3] >> 2);
 
+  
+
   if (srcDst == 0) { // This packet was destined for us
     if (!cmdPacket) { // Invalid packet - must be a command
       return;
@@ -120,43 +122,21 @@ void handleComms() {
 }
 
 // Returns true if we've arrived at loc, otherwise false and step forward.
-bool stepOnceTowards(long loc) {
-  static long realLoc = -1L;
-  static long normalizedLoc = 0L;
-  static long lastMaxLoc = MODULE_STEPS - 1L;
+bool stepOnceTowards(long pos) {
+  static long realPos = -1000L;
 
-  if (loc > lastMaxLoc) {
-    loc = 0;
-  }
-  if (realLoc >= 0) {
-    if (loc == normalizedLoc) {
-      return true;
-    }
-    
-    if (normalizedLoc != realLoc) {
-      normalizedLoc++;
-      if (normalizedLoc > lastMaxLoc) {
-        normalizedLoc = 0;
-      }
-      if (loc == normalizedLoc) {
-        return true;
-      }
-      return false;
-    }
-  
-    normalizedLoc++;
+  pos = pos % MODULE_STEPS;
+  if (abs(pos - realPos) <= 2 || abs((pos + MODULE_STEPS) - realPos) <= 2 || abs(pos - (realPos + MODULE_STEPS)) <= 2) {
+    return true;
   }
 
   do {
     byte lastSenseState = digitalRead(POS_SENSE_PIN);
     motStep();
-    if (lastSenseState == LOW && digitalRead(POS_SENSE_PIN) == HIGH && (realLoc == -1 || realLoc > MODULE_STEPS / 2)) {
-      if (realLoc >= 0) {
-        lastMaxLoc = realLoc;
-      }
-      realLoc = 0L;
-    } else if (realLoc >= 0L) {
-      realLoc++;
+    if (lastSenseState == LOW && digitalRead(POS_SENSE_PIN) == HIGH) {
+      realPos = 0L;
+    } else if (realPos >= 0L && realPos < MODULE_STEPS - 1) {
+      realPos++;
     }
   } while (digitalRead(TX_PIN) == HIGH);
 
@@ -165,6 +145,8 @@ bool stepOnceTowards(long loc) {
   digitalWrite(MOT_2_PIN, LOW);
   digitalWrite(MOT_3_PIN, LOW);
   digitalWrite(MOT_4_PIN, LOW);
+
+  return false;
 }
 
 void motStep() {

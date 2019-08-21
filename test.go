@@ -60,7 +60,7 @@ func main() {
 
 	p := packet{
 		srcDst: 0,
-		pos:    0,
+		pos:    77,
 		typ:    packetTypeCommand,
 	}
 	buf := p.marshal()
