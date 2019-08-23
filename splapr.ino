@@ -1,31 +1,56 @@
-#ifdef ARDUINO_AVR_NANO
-// Nano is used for development and testing
-  #define DEV
-#endif
+// splapr_module.ino - Controller code that runs on a single splapr module.
+//
+// Copyright (C) 2019 Mansour Behabadi <mansour@oxplot.com>
+//
+// Redistribution and use in source and binary forms, with or without
+// modification, are permitted provided that the following conditions are
+// met:
+//
+// 1. Redistributions of source code must retain the above copyright
+// notice, this list of conditions and the following disclaimer.
+//
+// 2. Redistributions in binary form must reproduce the above copyright
+// notice, this list of conditions and the following disclaimer in the
+// documentation and/or other materials provided with the distribution.
+//
+// 3. Neither the name of the copyright holder nor the names of its
+// contributors may be used to endorse or promote products derived from
+// this software without specific prior written permission.
+//
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS
+// IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+// TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A
+// PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+// HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED
+// TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
+// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#ifndef DEV
-#include <SoftSerial.h>
+// NOTE This code is intentionally simple as minimize bugs and increase robustness
+// because splapr modules are not meant to be reprogrammed or maintained.
+// All the heavy lifting is done in the more powerful and accessible main controller
+// which also has inter-module knowledge.
+
+#ifndef ARDUINO_AVR_PRO
+#error This code is only tested for Arduino Pro Mini.
 #endif
 
 #include <FastCRC.h>
 
-#ifdef DEV
-  #define TX_PIN 5
-  #define MOT_1_PIN 2 // Blue wire
-  #define MOT_2_PIN 4 // Pink wire
-  #define MOT_3_PIN 3 // Yellow wire
-  #define POS_SENSE_PIN 7
-  #define serial Serial
-#else
-  #define RX_PIN 5
-  #define TX_PIN 4
-  #define MOT_1_PIN 0 // Blue wire
-  #define MOT_2_PIN 2 // Pink wire
-  #define MOT_3_PIN 1 // Yellow wire
-  #define POS_SENSE_PIN 3
-#endif
+#define MOT_1_PIN A1 // Blue wire
+#define MOT_2_PIN A0 // Yellow wire
+#define MOT_3_PIN A2 // Pink wire
+#define MOT_4_PIN 13 // Orange wire
 
-#define MOT_4_PIN TX_PIN // Orange wire
+// Due to arrangement of the components and position of the pins, it's much easier
+// to power the hall effect sensor through the uC instead of routing wires around to
+// VCC and GND on the board.
+#define HALL_VCC_PIN 2
+#define HALL_GND_PIN 3
+#define HALL_OUT_PIN 4
 
 #define SERIAL_BAUD 9600
 #define MOT_STEPS 2038L // the number of steps in one revolution of the 28BYJ-48 motor
@@ -34,42 +59,30 @@
 #define STATUS_IDLE 0
 #define POS_UNINIT ((1L << 12) - 1L) // 12 ones binary
 
-#ifndef DEV
-SoftSerial serial(RX_PIN, TX_PIN, true /* inverse logic */);
-#endif
-
 FastCRC8 CRC8;
 
-bool curStatus;
 long targetPosition = POS_UNINIT;
 
 void setup() {
-  pinMode(POS_SENSE_PIN, INPUT);
+  Serial.begin(SERIAL_BAUD);
+
+  pinMode(HALL_VCC_PIN, OUTPUT);
+  digitalWrite(HALL_VCC_PIN, HIGH);
+  pinMode(HALL_GND_PIN, OUTPUT);
+  pinMode(HALL_OUT_PIN, INPUT);
   pinMode(MOT_1_PIN, OUTPUT);
   pinMode(MOT_2_PIN, OUTPUT);
   pinMode(MOT_3_PIN, OUTPUT);
   pinMode(MOT_4_PIN, OUTPUT);
-
-  serial.begin(SERIAL_BAUD);
-
-  // Turn all output off by default
-  digitalWrite(MOT_1_PIN, LOW);
-  digitalWrite(MOT_2_PIN, LOW);
-  digitalWrite(MOT_3_PIN, LOW);
-  digitalWrite(MOT_4_PIN, LOW);
-
 }
 
 void loop() {
-  if (targetPosition != POS_UNINIT) {
-    curStatus = stepOnceTowards(targetPosition) ? STATUS_IDLE : STATUS_MOVING;
-  }
+  checkAndMove(targetPosition, true);
   handleComms();
 }
 
 void handleComms() {
-  // Packet buffer includes 3 bytes of data as descibed below and one byte of checksum.
-  // Packet structure:
+  // Each packet is made up of 5 bytes. MSBits are transmitted first. Packet format is as follows:
   // Byte 0:           Constant 0xd4 as packet header. Also helps with avoiding valid packets of all zeros.
   // Byte 1, bits 0-7: MSBits of Src/Dst
   // Byte 2, bits 6-7: LSBits of Src/Dst
@@ -80,7 +93,7 @@ void handleComms() {
   // Byte 4:           SMBUS CRC-8 checksum
   static byte buf[5];
   
-  if (!serial.available()) {
+  if (!Serial.available()) {
     return;
   }
 
@@ -88,18 +101,17 @@ void handleComms() {
   buf[1] = buf[2];
   buf[2] = buf[3];
   buf[3] = buf[4];
-  buf[4] = (byte)serial.read();
+  buf[4] = (byte) Serial.read();
 
   if (buf[0] != 0xd4 || CRC8.smbus(buf, 4) != buf[4]) {
     return;
   }
 
   // Extract packet data
-  unsigned long srcDst = ((unsigned long)buf[1] << 2) | ((unsigned long)buf[2] >> 6);
-  bool cmdPacket = ((unsigned long)buf[3] >> 1) & 1L;
-  unsigned long pos = ((((1L << 6) - 1L) & (unsigned long)buf[2]) << 6) | ((unsigned long)buf[3] >> 2);
-
-  
+  // FIXME probably don't need all these casts, but it's C so better be safe.
+  unsigned long srcDst = ((unsigned long) buf[1] << 2) | ((unsigned long) buf[2] >> 6);
+  bool cmdPacket = ((unsigned long) buf[3] >> 1) & 1L;
+  unsigned long pos = ((((1L << 6) - 1L) & (unsigned long) buf[2]) << 6) | ((unsigned long) buf[3] >> 2);
 
   if (srcDst == 0) { // This packet was destined for us
     if (!cmdPacket) { // Invalid packet - must be a command
@@ -107,7 +119,7 @@ void handleComms() {
     }
     buf[3] = (unsigned long)buf[3] & ~0b10L; // Change packet type to response
     cmdPacket = false;
-    buf[3] = ((unsigned long)buf[3] & ~1L) | (curStatus == STATUS_IDLE ? 0L : 1L); // Set current status
+    buf[3] = ((unsigned long)buf[3] & ~1L) | checkAndMove(pos, false); // Set current status
     targetPosition = pos;
   }
 
@@ -118,27 +130,27 @@ void handleComms() {
   buf[4] = CRC8.smbus(buf, 4);
 
   // Send out packet
-  serial.write(buf, 5);
+  Serial.write(buf, 5);
 }
 
-// Returns true if we've arrived at loc, otherwise false and step forward.
-bool stepOnceTowards(long pos) {
-  static long realPos = -1000L;
+// Step forward one step if needed to arrive at pos.
+// Returns operation status: idle or moving.
+int checkAndMove(long pos, bool motEnable) {
+  static long curPos = POS_UNINIT;
 
-  pos = pos % MODULE_STEPS;
-  if (abs(pos - realPos) <= 2 || abs((pos + MODULE_STEPS) - realPos) <= 2 || abs(pos - (realPos + MODULE_STEPS)) <= 2) {
-    return true;
+  if (pos == POS_UNINIT || curPos == pos % MODULE_STEPS) {
+    return STATUS_IDLE;
   }
 
-  do {
-    byte lastSenseState = digitalRead(POS_SENSE_PIN);
+  if (motEnable) {
+    byte lastSenseState = digitalRead(HALL_OUT_PIN);
     motStep();
-    if (lastSenseState == LOW && digitalRead(POS_SENSE_PIN) == HIGH) {
-      realPos = 0L;
-    } else if (realPos >= 0L && realPos < MODULE_STEPS - 1) {
-      realPos++;
+    if (lastSenseState == LOW && digitalRead(HALL_OUT_PIN) == HIGH) {
+      curPos = 0L;
+    } else if (curPos >= 0L && curPos < MODULE_STEPS - 1) {
+      curPos++;
     }
-  } while (digitalRead(TX_PIN) == HIGH);
+  }
 
   // Turn motor power off to avoid consuming power and heating up the motor.
   digitalWrite(MOT_1_PIN, LOW);
@@ -146,9 +158,10 @@ bool stepOnceTowards(long pos) {
   digitalWrite(MOT_3_PIN, LOW);
   digitalWrite(MOT_4_PIN, LOW);
 
-  return false;
+  return STATUS_MOVING;
 }
 
+// Step forward one step.
 void motStep() {
   static byte curStep = 0;
   switch (curStep) {
