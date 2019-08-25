@@ -52,11 +52,10 @@
 #define HALL_GND_PIN 3
 #define HALL_OUT_PIN 4
 
-#define SERIAL_BAUD 9600
+#define SERIAL_BAUD 115200
 #define MOT_STEPS 2038L // the number of steps in one revolution of the 28BYJ-48 motor
 #define MODULE_STEPS ((MOT_STEPS * 39L) / 32L) // 39:32 module gear ratio
-#define STATUS_MOVING 1
-#define STATUS_IDLE 0
+#define STEP_DELAY 2000
 #define POS_UNINIT ((1L << 12) - 1L) // 12 ones binary
 
 FastCRC8 CRC8;
@@ -74,18 +73,18 @@ void setup() {
   pinMode(MOT_4_PIN, OUTPUT);
 }
 
-long targetPosition = POS_UNINIT;
-long curPos = POS_UINIT;
+long targetPos = POS_UNINIT;
+long curPos = POS_UNINIT;
 
 void loop() {
   handleComms();
 
-  if (curPos == pos) {
+  if (curPos == targetPos) {
     return;
   }
 
   byte lastSenseState = digitalRead(HALL_OUT_PIN);
-  motStep()
+  motStep();
   if (lastSenseState == LOW && digitalRead(HALL_OUT_PIN) == HIGH) {
     curPos = 0L;
   } else if (curPos >= 0L && curPos < MODULE_STEPS - 1) {
@@ -127,7 +126,7 @@ void motStep() {
       digitalWrite(MOT_4_PIN, LOW);
     break;
   }
-  delayWithComms(2000);
+  delayWithComms(STEP_DELAY);
   curStep = (curStep + 1) % 4;
 }
 
@@ -178,10 +177,10 @@ void handleComms() {
     if (!cmdPacket) { // Invalid packet - must be a command
       return;
     }
+    targetPos = pos;
     buf[3] = (unsigned long)buf[3] & ~0b10L; // Change packet type to response
     cmdPacket = false;
-    buf[3] = ((unsigned long)buf[3] & ~1L) | checkAndMove(pos, false); // Set current status
-    targetPosition = pos;
+    buf[3] = ((unsigned long)buf[3] & ~1L) | (targetPos == curPos ? 0 : 1); // Set current status
   }
 
   // Update src/dst & CRC
