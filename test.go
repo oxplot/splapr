@@ -13,7 +13,7 @@ var (
 	crcSMBUSParams = crc8.Params{0x07, 0x00, false, false, 0x00, 0xf4, "CRC-8/SMBUS"}
 	smbusCRCTable  = crc8.MakeTable(crcSMBUSParams)
 
-	baud         = flag.Int("b", 19200, "baud rate")
+	baud         = flag.Int("b", 115200, "baud rate")
 	device       = flag.String("d", "/dev/ttyUSB0", "serial device")
 	sendCmd      = flag.Bool("c", true, "send command instead of response")
 	targetPos    = flag.Int("p", 0, "target position")

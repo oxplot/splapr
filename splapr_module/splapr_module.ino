@@ -52,7 +52,7 @@
 #define HALL_GND_PIN 3
 #define HALL_OUT_PIN 4
 
-#define SERIAL_BAUD 19200
+#define SERIAL_BAUD 115200
 #define MOT_STEPS 2038L // the number of steps in one revolution of the 28BYJ-48 motor
 #define MODULE_STEPS ((MOT_STEPS * 39L) / 32L) // 39:32 module gear ratio
 #define STEP_DELAY 2000
