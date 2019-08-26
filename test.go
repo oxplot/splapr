@@ -16,7 +16,7 @@ var (
 	baud         = flag.Int("b", 115200, "baud rate")
 	device       = flag.String("d", "/dev/ttyUSB0", "serial device")
 	sendCmd      = flag.Bool("c", true, "send command instead of response")
-	targetPos    = flag.Int("p", 0, "target position")
+	targetPos    = flag.Int("p", uninitPos, "target position")
 	targetModule = flag.Int("m", 0, "target module")
 	readReply    = flag.Bool("r", false, "read reply packet")
 )
@@ -25,11 +25,13 @@ type packetType int
 type moduleStatus int
 
 const (
-	packetTypeCommand  = 1
-	packetTypeResponse = 0
+	packetTypeCommand  packetType = 1
+	packetTypeResponse packetType = 0
 
-	moduleStatusIdle   = 0
-	moduleStatusMoving = 1
+	moduleStatusIdle   moduleStatus = 0
+	moduleStatusMoving moduleStatus = 1
+
+	uninitPos = 4095
 )
 
 type packet struct {

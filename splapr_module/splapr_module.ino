@@ -57,6 +57,9 @@
 #define MODULE_STEPS ((MOT_STEPS * 39L) / 32L) // 39:32 module gear ratio
 #define STEP_DELAY 2000
 #define POS_UNINIT ((1L << 12) - 1L) // 12 ones binary
+#define DATA_FLOW_RTL 1
+#define DATA_FLOW_LTR -1
+#define DATA_FLOW_DIR DATA_FLOW_LTR
 
 FastCRC8 CRC8;
 
@@ -99,8 +102,8 @@ void loop() {
 }
 
 void motStep() {
-  static byte curStep = 0;
-  switch (curStep) {
+  static signed char curStep = 0;
+  switch (curStep * DATA_FLOW_DIR) {
     case 0:
       digitalWrite(MOT_1_PIN, HIGH);
       digitalWrite(MOT_2_PIN, LOW);
@@ -127,7 +130,7 @@ void motStep() {
     break;
   }
   delayWithComms(STEP_DELAY);
-  curStep = (curStep + 1) % 4;
+  curStep = (curStep + DATA_FLOW_DIR) % 4;
 }
 
 // Delay while handling comms.
@@ -168,25 +171,32 @@ void handleComms() {
   }
 
   // Extract packet data
-  // FIXME probably don't need all these casts, but it's C so better be safe.
   unsigned long srcDst = ((unsigned long) buf[1] << 2) | ((unsigned long) buf[2] >> 6);
   bool cmdPacket = ((unsigned long) buf[3] >> 1) & 1L;
   unsigned long pos = ((((1L << 6) - 1L) & (unsigned long) buf[2]) << 6) | ((unsigned long) buf[3] >> 2);
 
   if (srcDst == 0) { // This packet was destined for us
-    if (!cmdPacket) { // Invalid packet - must be a command
+    if (!cmdPacket) { // Invalid packet - must be a command - drop
       return;
     }
-    targetPos = pos;
-    buf[3] = (unsigned long)buf[3] & ~0b10L; // Change packet type to response
+    if (pos != POS_UNINIT && pos > MODULE_STEPS - 1) { // Invalid position - drop
+      return;
+    }
+    if (pos != POS_UNINIT) {
+      targetPos = pos;
+    }
+    buf[3] = buf[3] & 0b11111101; // Change packet type to response
     cmdPacket = false;
-    buf[3] = ((unsigned long)buf[3] & ~1L) | (targetPos == curPos ? 0 : 1); // Set current status
+    buf[3] = (buf[3] & 0b11111110) | (targetPos == curPos ? 0 : 1); // Set current status
+    // Update position to current position
+    buf[2] = (buf[2] & 0b11000000) | (curPos >> 6);
+    buf[3] = (buf[3] & 0b00000011) | ((curPos & 0b00111111) << 2);
   }
 
   // Update src/dst & CRC
   srcDst = srcDst + (cmdPacket ? -1L : 1L);
   buf[1] = srcDst >> 2;
-  buf[2] = (0b111111 & buf[2]) | ((srcDst & 0b11) << 6);
+  buf[2] = (0b00111111 & buf[2]) | ((srcDst & 0b00000011) << 6);
   buf[4] = CRC8.smbus(buf, 4);
 
   // Send out packet
