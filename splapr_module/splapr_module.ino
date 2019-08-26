@@ -57,9 +57,6 @@
 #define MODULE_STEPS ((MOT_STEPS * 39L) / 32L) // 39:32 module gear ratio
 #define STEP_DELAY 2000
 #define POS_UNINIT ((1L << 12) - 1L) // 12 ones binary
-#define DATA_FLOW_RTL 1
-#define DATA_FLOW_LTR -1
-#define DATA_FLOW_DIR DATA_FLOW_LTR
 
 FastCRC8 CRC8;
 
@@ -103,34 +100,34 @@ void loop() {
 
 void motStep() {
   static signed char curStep = 0;
-  switch (curStep * DATA_FLOW_DIR) {
+  switch (curStep) {
     case 0:
       digitalWrite(MOT_1_PIN, HIGH);
       digitalWrite(MOT_2_PIN, LOW);
-      digitalWrite(MOT_3_PIN, LOW);
-      digitalWrite(MOT_4_PIN, HIGH);
+      digitalWrite(MOT_3_PIN, HIGH);
+      digitalWrite(MOT_4_PIN, LOW);
     break;
     case 1:
       digitalWrite(MOT_1_PIN, LOW);
       digitalWrite(MOT_2_PIN, HIGH);
-      digitalWrite(MOT_3_PIN, LOW);
-      digitalWrite(MOT_4_PIN, HIGH);
+      digitalWrite(MOT_3_PIN, HIGH);
+      digitalWrite(MOT_4_PIN, LOW);
     break;
     case 2:
       digitalWrite(MOT_1_PIN, LOW);
       digitalWrite(MOT_2_PIN, HIGH);
-      digitalWrite(MOT_3_PIN, HIGH);
-      digitalWrite(MOT_4_PIN, LOW);
+      digitalWrite(MOT_3_PIN, LOW);
+      digitalWrite(MOT_4_PIN, HIGH);
     break;
     case 3:
       digitalWrite(MOT_1_PIN, HIGH);
       digitalWrite(MOT_2_PIN, LOW);
-      digitalWrite(MOT_3_PIN, HIGH);
-      digitalWrite(MOT_4_PIN, LOW);
+      digitalWrite(MOT_3_PIN, LOW);
+      digitalWrite(MOT_4_PIN, HIGH);
     break;
   }
   delayWithComms(STEP_DELAY);
-  curStep = (curStep + DATA_FLOW_DIR) % 4;
+  curStep = (curStep + 1) % 4;
 }
 
 // Delay while handling comms.
