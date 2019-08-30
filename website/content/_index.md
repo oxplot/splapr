@@ -1,5 +1,5 @@
 ---
-title: Home
+title: Modular, Customizable & Affordable Split Flap Displays for Everyone
 type: docs
 ---
 
