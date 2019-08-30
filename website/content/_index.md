@@ -1,12 +1,13 @@
 ---
-title: Modular, Customizable & Affordable Split Flap Displays for Everyone
+title: Modular, Customizable & Affordable Split-flap Displays for Everyone
 type: docs
 ---
 
 # What is splapr?
 
-splapr is a **modular, customizable & affordable [split
-flap](https://en.wikipedia.org/wiki/Split-flap_display) display for everyone**!
+splapr is a **modular, customizable & affordable
+[split-flap](https://en.wikipedia.org/wiki/Split-flap_display) display
+for everyone**!
 
 # But why?
 
@@ -16,12 +17,12 @@ creates an environment for creativity. And they're not just about
 visuals; they sound great too. They can grab your attention just before
 a message for instance.
 
-As to why yet another split flap display: splapr modules can be made for
+As to why yet another split-flap display: splapr modules can be made for
 under $10 each and by anyone. They use widely available and cheap components.
 
 # Goals
 
-I wanted to make split flap displays accessible for everyone. So if on a
+I wanted to make split-flap displays accessible for everyone. So if on a
 whim, you wanted to make a clock out of it, you could with a small
 budget. Here are a summary of the goals I set out to achieve:
 
