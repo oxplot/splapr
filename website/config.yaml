@@ -2,3 +2,6 @@ baseURL: https://splapr.com/
 languageCode: en-us
 title: splapr
 theme: book
+
+params:
+  BookMenuBundle: /menu
