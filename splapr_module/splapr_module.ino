@@ -1,6 +1,6 @@
 // splapr_module.ino - Controller code that runs on a single splapr module.
 //
-// Copyright (C) 2019 Mansour Behabadi <mansour@oxplot.com>
+// Copyright (C) 2022 Mansour Behabadi <mansour@oxplot.com>
 //
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
